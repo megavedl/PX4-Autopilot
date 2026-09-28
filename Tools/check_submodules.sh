@@ -1,5 +1,21 @@
 #!/usr/bin/env bash
 
+# Builds configured in parallel (e.g. make -j with several targets) check the
+# same submodules at once: git allows one writer per repository, and a
+# submodule another build is still cloning already has its .git. Re-run this
+# script holding an exclusive lock so the second build waits for the first to
+# finish. python3 is a PX4 build requirement on every platform, unlike flock;
+# the lock is released when the script exits, however it exits.
+if [ -z "$PX4_CHECK_SUBMODULES_LOCKED" ]; then
+	export PX4_CHECK_SUBMODULES_LOCKED=1
+	exec python3 -c '
+import fcntl, os, sys
+lock = open(sys.argv[1], "w")
+fcntl.flock(lock, fcntl.LOCK_EX)
+os.set_inheritable(lock.fileno(), True)
+os.execv(sys.argv[2], sys.argv[2:])' "$(git rev-parse --git-common-dir)/px4_check_submodules.lock" "$0" "$@"
+fi
+
 function check_git_submodule {
 
 # The .git exists in a submodule if init and update have been done.
